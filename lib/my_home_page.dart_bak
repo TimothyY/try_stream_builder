@@ -21,36 +21,42 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
 
   List<Song> _songs = [];
-  List<Song> _latestSongsOnLocal = [];
+  List<Song> _latestSongsOnStream = [];
   List<Song> _latestSongsOnApi = [];
+  // final StreamController<List<Song>> songsStreamController = StreamController<List<Song>>.broadcast();
+  // Stream<List<Song>> get stream => songsStreamController.stream;
+  late Stream<List<Song>> _stream;
 
   late Future<List<Song>> futureSongs;
   Future<List<Song>> _fetchSongs() async {
     //this will overwrite local data with latest from api
     _latestSongsOnApi = await SongApi.getSongs();
     _songs = _latestSongsOnApi;
+    // songsStreamController.add(_songs);
     return _songs;
   }
 
   Future<List<Song>> _updateLocalSongs(List<Song> localSongs) async {
     //this will overwrite local data with latest from api
-    _latestSongsOnLocal = localSongs;
-    _songs = _latestSongsOnLocal;
+    _latestSongsOnStream = localSongs;
+    _songs = _latestSongsOnStream;
+    // songsStreamController.add(_songs);
     return _songs;
   }
 
   @override
   void initState() {
     super.initState();
-    futureSongs = _fetchSongs();
+    // futureSongs = _fetchSongs();
+    _stream = _fetchSongs().asStream();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("try_flutter_api")),
-      body: FutureBuilder(
-          future: futureSongs,
+      body: StreamBuilder(
+          stream: _stream,
           builder: (BuildContext context, AsyncSnapshot<List<Song>> snapshot){
             if(snapshot.connectionState==ConnectionState.waiting){
               return ListView.builder(
@@ -153,7 +159,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future _handleRefresh() async {
     print("refreshing data ...");
-    setState(() {futureSongs = _fetchSongs();});
+    setState(() {_stream = _fetchSongs().asStream();});
     return;
   }
 
@@ -172,7 +178,7 @@ class _MyHomePageState extends State<MyHomePage> {
             onPressed: () {
               _songs[songIndex].statusInt=0;
               setState(() {
-                futureSongs = _updateLocalSongs(_songs);
+                _stream = _updateLocalSongs(_songs).asStream();
               });
             }),
           ElevatedButton(
@@ -180,7 +186,7 @@ class _MyHomePageState extends State<MyHomePage> {
               onPressed: () {
                 _songs[songIndex].statusInt=1;
                 setState(() {
-                  futureSongs = _updateLocalSongs(_songs);
+                  _stream = _updateLocalSongs(_songs).asStream();
                 });
               },
           ),
