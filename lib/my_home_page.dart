@@ -1,21 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:try_stream_builder/api/song_api.dart';
 import 'package:try_stream_builder/model/song.dart';
 
+extension Count<T extends Iterable> on Stream<T> {
+  Stream<int> get getLength => map((event) => event.length);
+}
+
 class MyHomePage extends StatefulWidget {
   const MyHomePage({Key? key, required this.title}): super(key: key);
-
-  // const MyApp({Key? key}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
 
   final String title;
 
@@ -25,46 +20,76 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
 
-  late Future<List<Song>> futureSongs;
+  List<Song> _songs = [];
+  List<Song> _latestSongsOnStream = [];
+  List<Song> _latestSongsOnApi = [];
+  // final StreamController<List<Song>> songsStreamController = StreamController<List<Song>>.broadcast();
+  // Stream<List<Song>> get stream => songsStreamController.stream;
+  late Stream<List<Song>> _stream;
 
+  late Future<List<Song>> futureSongs;
   Future<List<Song>> _fetchSongs() async {
-    List<Song> songs=[];
-    songs = await SongApi.getSongs();
-    return songs;
+    //this will overwrite local data with latest from api
+    _latestSongsOnApi = await SongApi.getSongs();
+    _songs = _latestSongsOnApi;
+    // songsStreamController.add(_songs);
+    return _songs;
+  }
+
+  Future<List<Song>> _updateLocalSongs(List<Song> localSongs) async {
+    //this will overwrite local data with latest from api
+    _latestSongsOnStream = localSongs;
+    _songs = _latestSongsOnStream;
+    // songsStreamController.add(_songs);
+    return _songs;
   }
 
   @override
   void initState() {
     super.initState();
-    futureSongs = _fetchSongs();
+    // futureSongs = _fetchSongs();
+    _stream = _fetchSongs().asStream();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("try_flutter_api")),
-      body: FutureBuilder(
-          future: futureSongs,
+      body: StreamBuilder(
+          stream: _stream,
           builder: (BuildContext context, AsyncSnapshot<List<Song>> snapshot){
             if(snapshot.connectionState==ConnectionState.waiting){
               return ListView.builder(
                   itemCount: 10,
                   itemBuilder: (context, index) => _buildLoadingSongCard()
               );
-            }else if(snapshot.connectionState==ConnectionState.done&&snapshot.hasData){
-              if(snapshot.data!.isEmpty){return _buildNoData("No Data");}
-              else{
-                return RefreshIndicator(
-                  onRefresh: _handleRefresh,
-                  child: ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      scrollDirection: Axis.vertical,
-                      itemCount: snapshot.data!.length,
-                      itemBuilder: (context,index)=> _buildSongCard(index,snapshot.data![index])
-                  ),
-                );
-              }
-            }else{return _buildNoData("No Data");}
+            }
+            else if(snapshot.connectionState==ConnectionState.done){
+              return RefreshIndicator(
+                onRefresh: _handleRefresh,
+                child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    scrollDirection: Axis.vertical,
+                    itemCount: snapshot.data!.length,
+                    itemBuilder: (context,index)=> _buildSongCard(index,snapshot.data![index])
+                ),
+              );
+            }else{return _buildNoData("No Data2");}
+
+            // else if(snapshot.connectionState==ConnectionState.done&&snapshot.hasData){
+            //   if(snapshot.data!.isEmpty){return _buildNoData("No Data1");}
+            //   else{
+            //     return RefreshIndicator(
+            //       onRefresh: _handleRefresh,
+            //       child: ListView.builder(
+            //           physics: const AlwaysScrollableScrollPhysics(),
+            //           scrollDirection: Axis.vertical,
+            //           itemCount: snapshot.data!.length,
+            //           itemBuilder: (context,index)=> _buildSongCard(index,snapshot.data![index])
+            //       ),
+            //     );
+            //   }
+            // }else{return _buildNoData("No Data2");}
           }
       ),
     );
@@ -72,14 +97,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Widget _buildSongCard(int index, Song song){
     return SizedBox(
-      height: 80,
+      height: 108,
       child: InkWell(
         onTap: (){print("Song["+index.toString()+"]: "+song.songTitle+" tapped.");},
         child: Card(
           clipBehavior: Clip.antiAlias,
           child: Row(children: <Widget>[
             Container(
-              width: 80,
+              width: 108,
               child: Image.network(song.albumArt),
             ),
             Expanded(
@@ -93,7 +118,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   padding: const EdgeInsets.fromLTRB(8.0, 1.0, 8.0, 4.0),
                   child: Text(song.songAlbum),
                 ),
-                _buildStatusInt(song.statusInt)
+                _buildStatusInt(index)
               ],),
             )],),
         ),
@@ -134,11 +159,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future _handleRefresh() async {
     print("refreshing data ...");
-    setState(() {futureSongs = _fetchSongs();});
+    setState(() {_stream = _fetchSongs().asStream();});
     return;
   }
 
-  Widget _buildStatusInt(int? statusInt){
+  Widget _buildStatusInt(int songIndex){
     // return Container(
     //   padding: const EdgeInsets.fromLTRB(8.0, 1.0, 8.0, 4.0),
     //   child: Text(statusInt.toString()),
@@ -148,10 +173,31 @@ class _MyHomePageState extends State<MyHomePage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          statusInt==0?Text("0",style: TextStyle(color: Colors.green),):Text("0",style: TextStyle(color: Colors.black),),
-          statusInt==1?Text("1",style: TextStyle(color: Colors.green),):Text("1",style: TextStyle(color: Colors.black),),
+          ElevatedButton(
+            child: Text("0",style: _songs[songIndex].statusInt==0?TextStyle(color: Colors.white):TextStyle(color: Colors.black)),
+            onPressed: () {
+              _songs[songIndex].statusInt=0;
+              setState(() {
+                _stream = _updateLocalSongs(_songs).asStream();
+              });
+            }),
+          ElevatedButton(
+              child: Text("1",style: _songs[songIndex].statusInt==1?TextStyle(color: Colors.white):TextStyle(color: Colors.black)),
+              onPressed: () {
+                _songs[songIndex].statusInt=1;
+                setState(() {
+                  _stream = _updateLocalSongs(_songs).asStream();
+                });
+              },
+          ),
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    // songsStreamController.close();
+    super.dispose();
   }
 }

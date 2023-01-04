@@ -13,7 +13,7 @@ class SongDao {
         Song.SONG_ID+" INTEGER PRIMARY KEY," + //pk, int
         Song.SONG_TITLE+" TEXT," +
         Song.SONG_ALBUM+" TEXT," +
-        Song.ALBUM_ART+" TEXT)," +
+        Song.ALBUM_ART+" TEXT," +
         Song.STATUS_INT+" INTEGER);");//bool
   }
 
